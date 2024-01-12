@@ -1,7 +1,7 @@
 module "s3_redirect_bucket" {
   source = "terraform-aws-modules/s3-bucket/aws"
 
-  bucket = "dominaname-redirect-bucket"
+  bucket = "${var.namespace}-redirect-bucket"
   acl    = "private"
 
   control_object_ownership = true
@@ -24,6 +24,7 @@ module "s3_notifications" {
       function_arn  = module.csv_lambda.lambda_function_arn
       function_name = module.csv_lambda.lambda_function_name
       events        = ["s3:ObjectCreated:Put"]
+      filter_prefix = "${var.hostnames_files}.csv"
     }
   }
 }

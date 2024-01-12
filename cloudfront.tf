@@ -1,9 +1,9 @@
 module "cdn" {
   source = "terraform-aws-modules/cloudfront/aws"
 
-  aliases = ["redirect.domain.com"]
+  aliases = [var.cloudfront_domain_name]
 
-  comment             = "Redirect POC"
+  comment             = "Redirect POC - ${var.namespace}"
   enabled             = true
   is_ipv6_enabled     = true
   price_class         = "PriceClass_All"
@@ -13,8 +13,8 @@ module "cdn" {
   create_origin_access_identity = true
 
   origin = {
-    djhdomain = {
-      domain_name = "otherdomain.com"
+    main = {
+      domain_name = var.base_redirect_domain
       custom_origin_config = {
         http_port              = 80
         https_port             = 443
@@ -25,20 +25,30 @@ module "cdn" {
   }
 
   default_cache_behavior = {
-    target_origin_id           = "djhdomain"
-    viewer_protocol_policy     = "allow-all"
+    target_origin_id       = "main"
+    viewer_protocol_policy = "allow-all"
 
-    allowed_methods = ["GET", "HEAD", "OPTIONS"]
-    cached_methods  = ["GET", "HEAD"]
-    compress        = true
-    query_string    = true
+    allowed_methods      = ["GET", "HEAD"]
+    cached_methods       = ["GET", "HEAD"]
+    compress             = true
+    query_string         = true
+    use_forwarded_values = false
+
+    cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # AllViewer
+
+    lambda_function_association = {
+
+      origin-request = {
+        lambda_arn   = module.lambda_at_edge.lambda_function_qualified_arn
+        include_body = false
+      }
+    }
   }
 
-  ordered_cache_behavior = [
-  ]
-
   viewer_certificate = {
-    acm_certificate_arn = "arn:aws:acm:us-east-1:456509733385:certificate/e92a4d58-34bd-460b-81a6-973daadf41cc"
-    ssl_support_method  = "sni-only"
+    acm_certificate_arn      = module.acm.acm_certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 }

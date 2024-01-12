@@ -1,50 +1,57 @@
 import boto3
-from urllib.parse import urlparse
+import json
 
-# Initialize a DynamoDB client
-dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
+CONFIG_FILE_PATH = 'config.json'
+
+def load_config():
+    """Load configuration from the JSON file."""
+    with open(CONFIG_FILE_PATH, 'r') as config_file:
+        return json.load(config_file)
+
+def initialize_dynamodb(table_name, table_region):
+    """Initialize DynamoDB resource."""
+    dynamodb = boto3.resource('dynamodb', region_name=table_region)
+    return dynamodb.Table(table_name)
+
+def get_redirect_response(table, hostname, path):
+    """Get redirect response from DynamoDB table."""
+    try:
+        response = table.get_item(Key={'hostname': hostname, 'hostname_path': path})
+        item = response.get('Item')
+        if item:
+            return {
+                'status': str(item['redirect_http_code']),
+                'statusDescription': 'Found',
+                'headers': {
+                    'location': [{
+                        'key': 'Location',
+                        'value': 'https://' + item['redirect_host'] + item['redirect_path']
+                    }]
+                }
+            }
+    except Exception as e:
+        print(f"Error querying DynamoDB: {e}")
 
 def lambda_handler(event, context):
-    # Extract the request details
+    """AWS Lambda handler function."""
     request = event['Records'][0]['cf']['request']
+    hostname, path = request['headers']['host'][0]['value'], request['uri']
     
-    # Parse the hostname and path from the request URI
-    hostname = request['headers']['host'][0]['value']
-    path = request['uri']
-    full_host_path = hostname + path
-
-    # Specify the DynamoDB table
-    table = dynamodb.Table('redirect-hosts')
+    config = load_config()
+    table = initialize_dynamodb(config['dynamodb_table'], config['dynamodb_region'])
     
-    #try:
-        # Query the DynamoDB table for the hostname and path
-    response = table.get_item(
-        Key={
-            'hostname': full_host_path,
+    redirect_response = get_redirect_response(table, hostname, path)
+    if redirect_response:
+        return redirect_response
+    
+    # Fallback to base origin if no redirect is found
+    return {
+        'status': '302',
+        'statusDescription': 'Found',
+        'headers': {
+            'location': [{
+                'key': 'Location',
+                'value': f'https://{config["origin_domain"]}'
+            }]
         }
-    )
-    
-    # Check if a matching item was found
-    if 'Item' in response:
-        item = response['Item']
-        redirect_hostname = item['redirect_hostname']
-        redirect_http_code = int(item['redirect_http_code'])
-
-        # Create a redirect response
-        response = {
-            'status': str(redirect_http_code),
-            'statusDescription': 'Found',
-            'headers': {
-                'location': [{
-                    'key': 'Location',
-                    'value': 'https://' + redirect_hostname + path
-                }]
-            }
-        }
-        return response
-
-    # except Exception as e:
-    #     print(f"Error querying DynamoDB: {e}")
-
-    # Return the original request if no redirect is necessary
-    return request
+    }

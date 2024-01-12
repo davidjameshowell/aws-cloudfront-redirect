@@ -1,3 +1,3 @@
-hostname,redirect_host,redirect_http_code
-redirect.domain.com/a-new-path,amazon.com,301
-redirect.domain.com/another-path,cnn.com,301
+hostname,hostname_path,redirect_host,redirect_path,redirect_http_code
+r.araec.com,/a-new-path,amazon.com,/,302
+r.araec.com,/another-path,cnn.com,/,302
